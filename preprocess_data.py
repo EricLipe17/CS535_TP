@@ -74,7 +74,8 @@ def segment_video(video_path, segment_size=10, frame_size=(320, 320)):
             else:
                 segments.append(frames)
                 frames = [frame]
-    # sometimes the last few frames of a video are invalid... Thus we need to handle that case
+    # Sometimes the last few frames of a video are invalid... Thus we need to handle that case. Easiest way is to just
+    # ignore the video
     if len(frames) != segment_size and total_processed > segment_size:
         try:
             overlapping_frames = [None] * segment_size
