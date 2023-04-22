@@ -4,13 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-torch = "2.0.0"
-torchvision = "0.15.1"
-numpy = "1.24.2"
-pandas = "1.5.3"
-matplotlib = "3.7.1"
-django = "4.1.7"
-opencv-python = "4.7.0.72"
 
 [dev-packages]
 

@@ -7,12 +7,13 @@ from torch.utils.data import Dataset
 
 
 class WLASLSegmentDataset(Dataset):
-    def __init__(self, data_dir, csv_file):
+    def __init__(self, data_dir, csv_file, labels_map=None):
         self.csv_file = csv_file
         self.num_frames_per_segment = int(self.csv_file.split('_')[0])
         col_names = [i for i in range(self.determine_max_num_columns())]
         self.df = pd.read_csv(self.csv_file, header=None, names=col_names)
         self.data_dir = data_dir
+        self.labels_map = labels_map
 
     def determine_max_num_columns(self):
         with open(self.csv_file) as f:
@@ -22,7 +23,6 @@ class WLASLSegmentDataset(Dataset):
                 length = len(line.split(','))
                 max_cols = length if length > max_cols else max_cols
         return max_cols
-
 
     def __len__(self):
         return len(self.df)
@@ -46,5 +46,8 @@ class WLASLSegmentDataset(Dataset):
                 segments[i] = frames
 
         label = self.df.iloc[idx, num_segments + 1]
+        label_index = self.labels_map[label]
+        label_tensor = torch.zeros((len(self.labels_map),))
+        label_tensor[label_index] = 1
 
-        return label, segments
+        return label_tensor, torch.tensor(segments, dtype=torch.float32)
