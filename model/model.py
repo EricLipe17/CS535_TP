@@ -3,7 +3,7 @@ import torch
 
 
 class Padded3DCNN(torch.nn.Module):
-    def __init__(self, num_classes, conv_layers, fc_layers, p_drop, loss_func=torch.nn.CrossEntropyLoss(),
+    def __init__(self, num_classes, conv_layers, fc_layers, p_drop, batch_size, loss_func=torch.nn.CrossEntropyLoss(),
                  save_fqp='./'):
         super(Padded3DCNN, self).__init__()
         self.num_classes = num_classes
@@ -13,6 +13,7 @@ class Padded3DCNN(torch.nn.Module):
         self.optim = None
         self.scheduler = None
         self.save_fqp = os.path.abspath(save_fqp)
+        self.batch_size = batch_size
 
         if not os.path.exists(self.save_fqp):
             os.makedirs(self.save_fqp)
@@ -32,7 +33,7 @@ class Padded3DCNN(torch.nn.Module):
             self.layers.append(torch.nn.LeakyReLU())
             prev_layer_size = fc_layer
 
-        self.layers.append(torch.nn.Softmax(dim=0))
+        self.layers.append(torch.nn.Softmax())
 
         # send everything to device
         self.layers.to(self.device)
@@ -61,7 +62,7 @@ class Padded3DCNN(torch.nn.Module):
             if type(layer) is torch.nn.Sequential:
                 prev_was_conv = True
             if prev_was_conv and type(layer) is torch.nn.Linear:
-                x = x.flatten()
+                x = x.reshape((x.shape[0], x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]))
                 prev_was_conv = False
             if type(layer) is torch.nn.InstanceNorm1d:
                 x = x.unsqueeze(0)
@@ -85,7 +86,6 @@ class Padded3DCNN(torch.nn.Module):
                 prediction = self(frames)
 
                 # Calculate softmax and cross entropy loss
-                label = label.reshape((2000,))
                 label = label.to(self.device)
                 prediction = prediction.to(self.device)
                 loss = self.loss_func(prediction, label)

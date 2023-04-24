@@ -33,15 +33,15 @@ fc_layers = [3500, 2000]
 
 if segment:
     save_fqp = './10_frame_segments'
-    model = Segmented3DCNN(2000, conv_layers, fc_layers, 0.20, save_fqp=save_fqp)
+    model = Segmented3DCNN(2000, conv_layers, fc_layers, 0.20, 2, save_fqp=save_fqp)
     dataset = WLASLSegmentDataset('', '10_frame_segments.csv', labels_map)
 elif pad:
     save_fqp = './padded_videos/'
-    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, save_fqp=save_fqp)
+    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, 2, save_fqp=save_fqp)
     dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
 else:
     save_fqp = './resized_videos/'
-    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, save_fqp=save_fqp)
+    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, 2, save_fqp=save_fqp)
     dataset = WLASLDataset('', 'videos_train.csv', labels_map)
 
 num_epochs = 5
