@@ -45,7 +45,7 @@ else:
     dataset = WLASLDataset('', 'videos_train.csv', labels_map)
 
 num_epochs = 5
-learning_rate = 1e-7
+learning_rate = 1e-5
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 model.set_optimizer(optimizer)
 

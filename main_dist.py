@@ -1,4 +1,9 @@
+import argparse
+import csv
+import numpy as np
 import os
+import pandas as pd
+import random
 import torch
 import torchvision
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -35,17 +40,10 @@ class PaddedWLASLDataset(Dataset):
 
 class CNN3D(torch.nn.Module):
     def __init__(self, num_classes, conv_layers, fc_layers, p_drop):
-        super(Padded3DCNN, self).__init__()
+        super(CNN3D, self).__init__()
         self.num_classes = num_classes
         self.num_conv_layers = len(conv_layers)
         self.num_fc_layers = len(fc_layers)
-        self.save_fqp = os.path.abspath(save_fqp)
-
-        if not os.path.exists(self.save_fqp):
-            os.makedirs(self.save_fqp)
-
-        use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda" if use_cuda else "cpu")
 
         self.layers = torch.nn.ParameterList()
         for conv_layer in conv_layers:
@@ -64,13 +62,6 @@ class CNN3D(torch.nn.Module):
         self.layers.append(torch.nn.Dropout(p_drop))
 
         self.layers.append(torch.nn.Softmax(dim=1))
-
-        # send everything to device
-        self.layers.to(self.device)
-        for layer in self.layers:
-            layer.to(self.device)
-        self.loss_func.to(self.device)
-        self.to(self.device)
 
     @staticmethod
     def _build_conv_layer(in_channels, out_channels, conv_kernel_size, conv_stride, conv_padding, pool_kernel_size):
@@ -115,6 +106,13 @@ def set_random_seeds(random_seed=0):
 
 
 def main():
+    num_epochs_default = 20
+    batch_size_default = 1
+    learning_rate_default = 0.1
+    random_seed_default = 0
+    model_dir_default = "saved_models"
+    model_filename_default = "ddp_model.pth"
+
     # Each process runs on 1 GPU device specified by the local_rank argument.
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--local_rank", type=int,
@@ -126,7 +124,7 @@ def main():
     parser.add_argument("--random_seed", type=int, help="Random seed.", default=random_seed_default)
     parser.add_argument("--model_dir", type=str, help="Directory for saving models.", default=model_dir_default)
     parser.add_argument("--model_filename", type=str, help="Model filename.", default=model_filename_default)
-    parser.add_argument("--resume", action="store_true", help="Resume training from saved checkpoint.")
+    parser.add_argument("--resume", action="store_true", help="Resume training from saved checkpoint.", default=False)
     argv = parser.parse_args()
 
     local_rank = argv.local_rank
@@ -138,7 +136,7 @@ def main():
     model_filename = argv.model_filename
     resume = argv.resume
 
-    model_path = os.path.join(model_dir, model_filename)
+    model_filepath = os.path.join(model_dir, model_filename)
 
     # We need to use seeds to make sure that the models initialized in different processes are the same
     set_random_seeds(random_seed=random_seed)
@@ -146,11 +144,15 @@ def main():
     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
     torch.distributed.init_process_group(backend="nccl")
 
-    train_dataset = WLASLDataset('', 'padded_videos_train.csv', labels_map)
+    labels_map = load_labels('labels.csv')
+    train_dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
     train_sampler = DistributedSampler(train_dataset)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=4)
 
+    device = torch.device("cuda:{}".format(local_rank))
+
     loss_func = torch.nn.CrossEntropyLoss()
+    loss_func.to(device)
 
     conv_layers = [(3, 32, 3, 2, 1, 2),
                    (32, 64, 3, 2, 1, 2),
@@ -159,6 +161,7 @@ def main():
                    ]
     fc_layers = [3500, 2000]
     model = CNN3D(2000, conv_layers, fc_layers, 0.1)
+    model.to(device)
     ddp_model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
 
     optimizer = torch.optim.SGD(ddp_model.parameters(), lr=learning_rate)
@@ -169,24 +172,24 @@ def main():
         map_location = {"cuda:0": "cuda:{}".format(local_rank)}
         ddp_model.load_state_dict(torch.load(model_filepath, map_location=map_location))
 
-    for i in range(num_epochs):
+    for epoch in range(num_epochs):
         print("Local Rank: {}, Epoch: {}, Training ...".format(local_rank, epoch))
 
         ddp_model.train()
 
         for j, (label, frames) in enumerate(train_loader):
             # Move to device
-            frames = frames.to(self.device)
+            frames = frames.to(device)
 
             # Clear gradients
             optimizer.zero_grad()
 
             # Forward propagation
-            prediction = self(frames)
+            prediction = ddp_model(frames)
 
             # Calculate softmax and cross entropy loss
-            label = label.to(self.device)
-            prediction = prediction.to(self.device)
+            label = label.to(device)
+            prediction = prediction.to(device)
             loss = loss_func(prediction, label)
 
             # Calculating gradients
@@ -197,5 +200,5 @@ def main():
 
             if j % 50 == 0 or j == 0 or j == len(train_loader) - 1:
                 if local_rank == 0:
-                    print(f'Epoch: {i}, Iteration: {j}, Loss: {loss.data.item()}')
-                    torch.save(ddp_model.state_dict(), model_path)
+                    print(f'Epoch: {epoch}, Iteration: {j}, Loss: {loss.data.item()}')
+                    torch.save(ddp_model.state_dict(), model_filepath)

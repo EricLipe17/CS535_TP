@@ -100,7 +100,7 @@ class Padded3DCNN(torch.nn.Module):
                 self.optim.step()
                 self.scheduler.step()
 
-                if j % 50 == 0 or j == 0 or j == len(train_loader) - 1:
+                if j % 500 == 0 or j == 0 or j == len(train_loader) - 1:
                     print(f'Epoch: {i}, Iteration: {j}, Loss: {loss.data.item()}')
                     torch.save(self.state_dict(), os.path.join(self.save_fqp, 'model.pt'))
 
