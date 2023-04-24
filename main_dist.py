@@ -162,7 +162,7 @@ def main():
     train_sampler = DistributedSampler(train_dataset)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=1)
 
-    device = torch.device("cuda:{}".format(local_rank))
+    device = torch.device("cuda:{}".format(LOCAL_RANK))
     print(f'Using GPU: {device}')
 
     loss_func = torch.nn.CrossEntropyLoss()
@@ -176,7 +176,7 @@ def main():
     fc_layers = [3500, 2000]
     model = CNN3D(2000, conv_layers, fc_layers, 0.1)
     model.to(device)
-    ddp_model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+    ddp_model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[LOCAL_RANK], output_device=LOCAL_RANK)
     print("ddp_model created")
 
     optimizer = torch.optim.SGD(ddp_model.parameters(), lr=learning_rate)
@@ -184,11 +184,11 @@ def main():
     # We only save the model who uses rank 0 and device "cuda:0"
     # To resume, the device for the saved model would also be "cuda:0"
     if resume is True:
-        map_location = {"cuda:0": "cuda:{}".format(local_rank)}
+        map_location = {"cuda:0": "cuda:{}".format(LOCAL_RANK)}
         ddp_model.load_state_dict(torch.load(model_filepath, map_location=map_location))
 
     for epoch in range(num_epochs):
-        print("Local Rank: {}, Epoch: {}, Training ...".format(local_rank, epoch))
+        print("Local Rank: {}, Epoch: {}, Training ...".format(LOCAL_RANK, epoch))
 
         ddp_model.train()
 
@@ -215,7 +215,7 @@ def main():
             optimizer.step()
 
             if j % 50 == 0 or j == 0 or j == len(train_loader) - 1:
-                if local_rank == 0:
+                if LOCAL_RANK == 0:
                     print(f'Epoch: {epoch}, Iteration: {j}, Loss: {loss.data.item()}')
                     torch.save(ddp_model.state_dict(), model_filepath)
 
