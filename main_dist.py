@@ -56,7 +56,7 @@ class CNN3D(torch.nn.Module):
             self.layers.append(torch.nn.LeakyReLU())
             prev_layer_size = fc_layer
 
-        self.layers.append(torch.nn.Softmax(dim=0))
+        self.layers.append(torch.nn.Softmax())
 
     @staticmethod
     def _build_conv_layer(in_channels, out_channels, conv_kernel_size, conv_stride, conv_padding, pool_kernel_size):
