@@ -1,7 +1,9 @@
 WLASL/
 yt*
 data
-processed_data
+processed_data/*
+padded_videos/
+resized_videos/
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
