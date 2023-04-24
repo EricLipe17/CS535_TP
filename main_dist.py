@@ -50,7 +50,7 @@ class CNN3D(torch.nn.Module):
                                                       conv_layer[4], conv_layer[5]))
 
         # TODO: Figure out how to calculate this from parameters
-        prev_layer_size = 6400  # 2**3*conv_layers[-1][1]
+        prev_layer_size = 12800  # 2**3*conv_layers[-1][1]
         for fc_layer in fc_layers:
             self.layers.append(torch.nn.Linear(prev_layer_size, fc_layer))
             self.layers.append(torch.nn.LeakyReLU())

@@ -51,7 +51,7 @@ model.set_optimizer(optimizer)
 
 # Have to have batch size of 1 if using segments because each training sample can have a different number of segments.
 # The data loader does not allow this.
-train_loader = DataLoader(dataset, batch_size=1, shuffle=True)
+train_loader = DataLoader(dataset, batch_size=2, shuffle=True)
 
 start = time.process_time()
 model.train_model(train_loader, num_epochs, learning_rate)
