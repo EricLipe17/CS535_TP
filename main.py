@@ -1,5 +1,5 @@
-from dataset import WLASLSegmentDataset
-from model.model import CNN3D
+from dataset import WLASLSegmentDataset, PaddedWLASLDataset, WLASLDataset
+from model.model import Segmented3DCNN, Padded3DCNN
 
 import csv
 import datetime
@@ -18,33 +18,42 @@ def load_labels(fname):
 
 
 labels_map = load_labels('labels.csv')
-data_set = WLASLSegmentDataset('', '10_frame_segments.csv', labels_map)
+segment = False
+pad = True
+dataset = None
+save_fqp = None
+model = None
 
-conv_layers = [(10, 32, 3, 2, 1, 2),
-               (32, 64, 2, 1, 1, 2),
-               (64, 64, 2, 1, 1, 2),
-               (64, 128, 2, 1, 1, 2),
-               (128, 256, 2, 1, 1, 2),
-               (256, 256, 2, 1, 1, 2)]
-fc_layers = [5096, 2048]
+conv_layers = [(3, 32, 3, 2, 1, 2),
+               (32, 64, 3, 2, 1, 2),
+               (64, 128, 3, 2, 1, 2),
+               (128, 128, 2, 1, 1, 2),
+               ]
+fc_layers = [3500, 2000]
 
-model = CNN3D(2000, conv_layers, fc_layers, 0.20, save_fqp='10_frame_segments/model.pt')
-model.float()
-
-learning_rate = 0.001
-# optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-optimizer = torch.optim.Adam(model.parameters(), learning_rate)
-model.set_optimizer(optimizer)
+if segment:
+    save_fqp = './10_frame_segments'
+    model = Segmented3DCNN(2000, conv_layers, fc_layers, 0.20, save_fqp=save_fqp)
+    dataset = WLASLSegmentDataset('', '10_frame_segments.csv', labels_map)
+elif pad:
+    save_fqp = './padded_videos/'
+    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, save_fqp=save_fqp)
+    dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
+else:
+    save_fqp = './resized_videos/'
+    model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, save_fqp=save_fqp)
+    dataset = WLASLDataset('', 'videos_train.csv', labels_map)
 
 num_epochs = 5
-loss_list = []
-accuracy_list = []
+learning_rate = 1e-7
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+model.set_optimizer(optimizer)
 
-# Have to have batch size of 1 because each training sample can have a different number of segments. The data loader
-# does not allow this.
-train_loader = DataLoader(data_set, batch_size=1, shuffle=False)
+# Have to have batch size of 1 if using segments because each training sample can have a different number of segments.
+# The data loader does not allow this.
+train_loader = DataLoader(dataset, batch_size=1, shuffle=True)
 
 start = time.process_time()
-model.train_model(train_loader, num_epochs)
+model.train_model(train_loader, num_epochs, learning_rate)
 end = time.process_time()
-print(f'Time to train: {datetime.timedelta(seconds=end-start)}')
+print(f'Time to train: {datetime.timedelta(seconds=end - start)}')
