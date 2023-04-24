@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import random
+import time
 import torch
 import torchvision
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -109,14 +110,14 @@ def main():
     num_epochs_default = 20
     batch_size_default = 1
     learning_rate_default = 0.1
-    random_seed_default = 0
+    random_seed_default = time.time_ns()
     model_dir_default = "saved_models"
     model_filename_default = "ddp_model.pth"
 
     # Each process runs on 1 GPU device specified by the local_rank argument.
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--local_rank", type=int,
-                        help="Local rank. Necessary for using the torch.distributed.launch utility.")
+                        help="Local rank. Necessary for using the torch.distributed.launch utility.", default=0)
     parser.add_argument("--num_epochs", type=int, help="Number of training epochs.", default=num_epochs_default)
     parser.add_argument("--batch_size", type=int, help="Training batch size for one process.",
                         default=batch_size_default)
