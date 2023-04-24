@@ -122,18 +122,18 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume training from saved checkpoint.", default=False)
     argv = parser.parse_args()
 
+    LOCAL_RANK = int(os.environ['LOCAL_RANK'])
+    WORLD_SIZE = int(os.environ['WORLD_SIZE'])
+    WORLD_RANK = int(os.environ['RANK'])
+
     local_rank = argv.local_rank
     num_epochs = argv.num_epochs
-    batch_size = argv.batch_size
+    batch_size = argv.batch_size // WORLD_SIZE
     learning_rate = argv.learning_rate
     random_seed = argv.random_seed
     model_dir = argv.model_dir
     model_filename = argv.model_filename
     resume = argv.resume
-
-    LOCAL_RANK = int(os.environ['LOCAL_RANK'])
-    WORLD_SIZE = int(os.environ['WORLD_SIZE'])
-    WORLD_RANK = int(os.environ['RANK'])
 
     print('Args:')
     print(f'LOCAL_RANK: {LOCAL_RANK}')
@@ -155,7 +155,7 @@ def main():
 
     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
     print("Init process group")
-    torch.distributed.init_process_group(backend="nccl", rank=WORLD_RANK, world_size=WORLD_SIZE)
+    torch.distributed.init_process_group(backend="gloo", rank=WORLD_RANK, world_size=WORLD_SIZE)
 
     labels_map = load_labels('labels.csv')
     train_dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
@@ -214,8 +214,8 @@ def main():
             # Update parameters
             optimizer.step()
 
-            if j % 50 == 0 or j == 0 or j == len(train_loader) - 1:
-                if LOCAL_RANK == 0:
+            if j % 500 == 0 or j == 0 or j == len(train_loader) - 1:
+                if WORLD_RANK == 0:
                     print(f'Epoch: {epoch}, Iteration: {j}, Loss: {loss.data.item()}')
                     torch.save(ddp_model.state_dict(), model_filepath)
 
