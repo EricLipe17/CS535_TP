@@ -218,3 +218,7 @@ def main():
                 if local_rank == 0:
                     print(f'Epoch: {epoch}, Iteration: {j}, Loss: {loss.data.item()}')
                     torch.save(ddp_model.state_dict(), model_filepath)
+
+
+if __name__ == "__main__":
+    main()
