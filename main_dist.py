@@ -203,7 +203,6 @@ def main():
             prediction = ddp_model(frames)
 
             # Calculate softmax and cross entropy loss
-            label = label.reshape((2000,))
             label = label.to(device)
             prediction = prediction.to(device)
             loss = loss_func(prediction, label)

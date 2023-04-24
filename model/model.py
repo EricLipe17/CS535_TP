@@ -3,7 +3,7 @@ import torch
 
 
 class Padded3DCNN(torch.nn.Module):
-    def __init__(self, num_classes, conv_layers, fc_layers, p_drop, batch_size, loss_func=torch.nn.CrossEntropyLoss(),
+    def __init__(self, num_classes, conv_layers, fc_layers, p_drop, loss_func=torch.nn.CrossEntropyLoss(),
                  save_fqp='./'):
         super(Padded3DCNN, self).__init__()
         self.num_classes = num_classes
@@ -13,7 +13,6 @@ class Padded3DCNN(torch.nn.Module):
         self.optim = None
         self.scheduler = None
         self.save_fqp = os.path.abspath(save_fqp)
-        self.batch_size = batch_size
 
         if not os.path.exists(self.save_fqp):
             os.makedirs(self.save_fqp)
