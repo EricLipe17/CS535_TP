@@ -4,10 +4,8 @@ import numpy as np
 import os
 import pandas as pd
 import random
-import time
 import torch
 import torchvision
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
@@ -58,11 +56,7 @@ class CNN3D(torch.nn.Module):
             self.layers.append(torch.nn.LeakyReLU())
             prev_layer_size = fc_layer
 
-        self.layers.append(torch.nn.InstanceNorm1d(fc_layers[-1]))
-
-        self.layers.append(torch.nn.Dropout(p_drop))
-
-        self.layers.append(torch.nn.Softmax(dim=1))
+        self.layers.append(torch.nn.Softmax(dim=0))
 
     @staticmethod
     def _build_conv_layer(in_channels, out_channels, conv_kernel_size, conv_stride, conv_padding, pool_kernel_size):
@@ -110,7 +104,7 @@ def main():
     num_epochs_default = 20
     batch_size_default = 1
     learning_rate_default = 0.1
-    random_seed_default = time.time_ns()
+    random_seed_default = 0
     model_dir_default = "saved_models"
     model_filename_default = "ddp_model.pth"
 
@@ -189,6 +183,7 @@ def main():
             prediction = ddp_model(frames)
 
             # Calculate softmax and cross entropy loss
+            label = label.reshape((2000,))
             label = label.to(device)
             prediction = prediction.to(device)
             loss = loss_func(prediction, label)

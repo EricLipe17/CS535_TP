@@ -32,11 +32,7 @@ class Padded3DCNN(torch.nn.Module):
             self.layers.append(torch.nn.LeakyReLU())
             prev_layer_size = fc_layer
 
-        self.layers.append(torch.nn.InstanceNorm1d(fc_layers[-1]))
-
-        self.layers.append(torch.nn.Dropout(p_drop))
-
-        self.layers.append(torch.nn.Softmax(dim=1))
+        self.layers.append(torch.nn.Softmax(dim=0))
 
         # send everything to device
         self.layers.to(self.device)
@@ -89,6 +85,7 @@ class Padded3DCNN(torch.nn.Module):
                 prediction = self(frames)
 
                 # Calculate softmax and cross entropy loss
+                label = label.reshape((2000,))
                 label = label.to(self.device)
                 prediction = prediction.to(self.device)
                 loss = self.loss_func(prediction, label)
