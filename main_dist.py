@@ -131,13 +131,31 @@ def main():
     model_filename = argv.model_filename
     resume = argv.resume
 
+    LOCAL_RANK = int(os.environ['LOCAL_RANK'])
+    WORLD_SIZE = int(os.environ['WORLD_SIZE'])
+    WORLD_RANK = int(os.environ['RANK'])
+
+    print('Args:')
+    print(f'LOCAL_RANK: {LOCAL_RANK}')
+    print(f'WORLD_SIZE: {WORLD_SIZE}')
+    print(f'WORLD_RANK: {WORLD_RANK}')
+    print(f'num_epochs: {num_epochs}')
+    print(f'batch_size: {batch_size}')
+    print(f'learning_rate: {learning_rate}')
+    print(f'random_seed: {random_seed}')
+    print(f'model_dir: {model_dir}')
+    print(f'model_filename: {model_filename}')
+    print(f'resume: {resume}')
+
+
     model_filepath = os.path.join(model_dir, model_filename)
 
     # We need to use seeds to make sure that the models initialized in different processes are the same
     set_random_seeds(random_seed=random_seed)
 
     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-    torch.distributed.init_process_group(backend="nccl")
+    print("Init process group")
+    torch.distributed.init_process_group(backend="nccl", rank=WORLD_RANK, world_size=WORLD_SIZE)
 
     labels_map = load_labels('labels.csv')
     train_dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
@@ -145,6 +163,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=4)
 
     device = torch.device("cuda:{}".format(local_rank))
+    print(f'Using GPU: {device}')
 
     loss_func = torch.nn.CrossEntropyLoss()
     loss_func.to(device)
@@ -158,6 +177,7 @@ def main():
     model = CNN3D(2000, conv_layers, fc_layers, 0.1)
     model.to(device)
     ddp_model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+    print("ddp_model created")
 
     optimizer = torch.optim.SGD(ddp_model.parameters(), lr=learning_rate)
 
