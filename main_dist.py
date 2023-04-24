@@ -25,7 +25,7 @@ class PaddedWLASLDataset(Dataset):
             idx = idx.tolist()
 
         video_file = os.path.abspath(os.path.join(self.data_dir, self.df.iloc[idx, 0]))
-        frames, _, _ = torchvision.io.read_video(video_file)
+        frames, _, _ = torchvision.io.read_video(video_file, pts_unit='sec')
 
         label = self.df.iloc[idx, 1]
         label_index = self.labels_map[label]
@@ -160,7 +160,7 @@ def main():
     labels_map = load_labels('labels.csv')
     train_dataset = PaddedWLASLDataset('', 'padded_videos_train.csv', labels_map)
     train_sampler = DistributedSampler(train_dataset)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=1)
 
     device = torch.device("cuda:{}".format(local_rank))
     print(f'Using GPU: {device}')
