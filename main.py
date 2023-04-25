@@ -44,16 +44,13 @@ else:
     model = Padded3DCNN(2000, conv_layers, fc_layers, 0.1, save_fqp=save_fqp)
     dataset = WLASLDataset('', 'videos_train.csv', labels_map)
 
-num_epochs = 5
-learning_rate = 1e-8
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+num_epochs = 500
+learning_rate = 0.01
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-5)
 model.set_optimizer(optimizer)
 
 # Have to have batch size of 1 if using segments because each training sample can have a different number of segments.
 # The data loader does not allow this.
-train_loader = DataLoader(dataset, batch_size=2, shuffle=True)
+train_loader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-start = time.process_time()
 model.train_model(train_loader, num_epochs, learning_rate)
-end = time.process_time()
-print(f'Time to train: {datetime.timedelta(seconds=end - start)}')
