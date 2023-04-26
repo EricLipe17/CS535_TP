@@ -225,7 +225,8 @@ class NSLT(data_utl.Dataset):
 
         imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
 
-        if not imgs.any():
+        if not imgs.any() or imgs.shape[-1] != 3:
+            print("No frames, returning zeros array")
             return torch.zeros((3, total_frames, 224, 224)), torch.zeros((2000, total_frames)), -9999
 
         imgs, label = self.pad(imgs, label, total_frames)
@@ -800,4 +801,4 @@ if __name__ == '__main__':
     root = '../data'
     train_split = 'preprocess/nslt_2000.json'
     print(root, train_split)
-    main(root=root, train_split=train_split, weights=None)
+    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_007492_0.003165.pt')

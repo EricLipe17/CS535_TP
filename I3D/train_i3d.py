@@ -77,7 +77,7 @@ def main(configs,
     best_val_score = 0
     # train it
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.3)
-    while steps < configs.max_steps and epoch < 400:  # for epoch in range(num_epochs):
+    while steps < configs.max_steps and epoch < 400:
         print('Step {}/{}'.format(steps, configs.max_steps))
         print('-' * 10)
 
@@ -107,6 +107,7 @@ def main(configs,
                 inputs, labels, vid = data
 
                 if vid == -9999:
+                    print(f"Skiping video: {vid}")
                     continue
 
                 # wrap them in Variable
@@ -116,7 +117,7 @@ def main(configs,
 
                 per_frame_logits = i3d(inputs, pretrained=False)
                 # upsample to input size
-                per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                per_frame_logits = F.interpolate(per_frame_logits, t, mode='linear')
 
                 # compute localization loss
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
@@ -184,4 +185,4 @@ if __name__ == '__main__':
 
     configs = Config(config_file)
     print(root, train_split)
-    main(configs=configs, root=root, save_model=save_model, train_split=train_split, weights=None)
+    main(configs=configs, root=root, save_model=save_model, train_split=train_split, weights='checkpoints/nslt_2000_004996_0.000791.pt')
