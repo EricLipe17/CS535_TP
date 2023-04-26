@@ -143,7 +143,6 @@ def make_dataset(split_file, split, root, num_classes):
 
     i = 0
     count_skipping = 0
-    total = len(data.keys())
     for vid in data.keys():
         if split == 'train':
             if data[vid]['subset'] not in ['train', 'val']:
@@ -179,8 +178,6 @@ def make_dataset(split_file, split, root, num_classes):
         elif len(vid) == 6:  ## sign kws instances
             dataset.append((vid, label, src, data[vid]['action'][1], data[vid]['action'][2] - data[vid]['action'][1]))
 
-        if i % 1000 == 0:
-            print(f"Percent loaded {(i + 1) / total}")
         i += 1
     print("Skipped videos: ", count_skipping)
     print(len(dataset))
@@ -746,7 +743,7 @@ def main(root, train_split, weights):
 
                 per_frame_logits = ddp_i3d(inputs, pretrained=False)
                 # upsample to input size
-                per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                per_frame_logits = F.interpolate(per_frame_logits, t, mode='linear')
 
                 # compute localization loss
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
