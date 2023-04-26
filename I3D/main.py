@@ -741,11 +741,14 @@ def main(root, train_split, weights):
                 t = inputs.size(2)
                 labels = labels.to(device)
 
+                print("Computing forward pass")
                 per_frame_logits = ddp_i3d(inputs, pretrained=False)
+                print("Computed forward pass")
                 # upsample to input size
                 per_frame_logits = F.interpolate(per_frame_logits, t, mode='linear')
 
                 # compute localization loss
+                print("Compute localization loss")
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
                 tot_loc_loss += loc_loss.data.item()
 
@@ -753,6 +756,7 @@ def main(root, train_split, weights):
                 gt = torch.max(labels, dim=2)[0]
 
                 # compute classification loss (with max-pooling along time B x C x T)
+                print("Compute classification loss")
                 cls_loss = F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0],
                                                               torch.max(labels, dim=2)[0])
                 tot_cls_loss += cls_loss.data.item()
