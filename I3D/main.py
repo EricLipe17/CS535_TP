@@ -104,24 +104,7 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3, 0, 1, 2]))
 
 
-def load_rgb_frames(image_dir, vid, start, num):
-    frames = []
-    for i in range(start, start + num):
-        try:
-            img = cv2.imread(os.path.join(image_dir, vid, "image_" + str(i).zfill(5) + '.jpg'))[:, :, [2, 1, 0]]
-        except:
-            print(os.path.join(image_dir, vid, str(i).zfill(6) + '.jpg'))
-        w, h, c = img.shape
-        if w < 226 or h < 226:
-            d = 226. - min(w, h)
-            sc = 1 + d / min(w, h)
-            img = cv2.resize(img, dsize=(0, 0), fx=sc, fy=sc)
-        img = (img / 255.) * 2 - 1
-        frames.append(img)
-    return np.asarray(frames, dtype=np.float32)
-
-
-def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
+def load_rgb_frames_from_video(vid_root, vid, start, num):
     video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
 
     vidcap = cv2.VideoCapture(video_path)
@@ -150,26 +133,6 @@ def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
 
     if not frames:
         print("Frames length zero!")
-    return np.asarray(frames, dtype=np.float32)
-
-
-def load_flow_frames(image_dir, vid, start, num):
-    frames = []
-    for i in range(start, start + num):
-        imgx = cv2.imread(os.path.join(image_dir, vid, vid + '-' + str(i).zfill(6) + 'x.jpg'), cv2.IMREAD_GRAYSCALE)
-        imgy = cv2.imread(os.path.join(image_dir, vid, vid + '-' + str(i).zfill(6) + 'y.jpg'), cv2.IMREAD_GRAYSCALE)
-
-        w, h = imgx.shape
-        if w < 224 or h < 224:
-            d = 224. - min(w, h)
-            sc = 1 + d / min(w, h)
-            imgx = cv2.resize(imgx, dsize=(0, 0), fx=sc, fy=sc)
-            imgy = cv2.resize(imgy, dsize=(0, 0), fx=sc, fy=sc)
-
-        imgx = (imgx / 255.) * 2 - 1
-        imgy = (imgy / 255.) * 2 - 1
-        img = np.asarray([imgx, imgy]).transpose([1, 2, 0])
-        frames.append(img)
     return np.asarray(frames, dtype=np.float32)
 
 
@@ -239,6 +202,7 @@ class NSLT(data_utl.Dataset):
         self.num_classes = get_num_class(split_file)
 
         self.data = make_dataset(split_file, split, root, num_classes=self.num_classes)
+        print(f"Dataset Loaded for split: {split}")
         self.split_file = split_file
         self.transforms = transforms
         self.root = root
@@ -333,15 +297,9 @@ class MaxPool3dSamePadding(nn.MaxPool3d):
     def forward(self, x):
         # compute 'same' padding
         (batch, channel, t, h, w) = x.size()
-        # print t,h,w
-        out_t = np.ceil(float(t) / float(self.stride[0]))
-        out_h = np.ceil(float(h) / float(self.stride[1]))
-        out_w = np.ceil(float(w) / float(self.stride[2]))
-        # print out_t, out_h, out_w
         pad_t = self.compute_pad(0, t)
         pad_h = self.compute_pad(1, h)
         pad_w = self.compute_pad(2, w)
-        # print pad_t, pad_h, pad_w
 
         pad_t_f = pad_t // 2
         pad_t_b = pad_t - pad_t_f
@@ -351,8 +309,6 @@ class MaxPool3dSamePadding(nn.MaxPool3d):
         pad_w_b = pad_w - pad_w_f
 
         pad = (pad_w_f, pad_w_b, pad_h_f, pad_h_b, pad_t_f, pad_t_b)
-        # print x.size()
-        # print pad
         x = F.pad(x, pad)
         return super(MaxPool3dSamePadding, self).forward(x)
 
@@ -401,15 +357,9 @@ class Unit3D(nn.Module):
     def forward(self, x):
         # compute 'same' padding
         (batch, channel, t, h, w) = x.size()
-        # print t,h,w
-        out_t = np.ceil(float(t) / float(self._stride[0]))
-        out_h = np.ceil(float(h) / float(self._stride[1]))
-        out_w = np.ceil(float(w) / float(self._stride[2]))
-        # print out_t, out_h, out_w
         pad_t = self.compute_pad(0, t)
         pad_h = self.compute_pad(1, h)
         pad_w = self.compute_pad(2, w)
-        # print pad_t, pad_h, pad_w
 
         pad_t_f = pad_t // 2
         pad_t_b = pad_t - pad_t_f
@@ -419,10 +369,7 @@ class Unit3D(nn.Module):
         pad_w_b = pad_w - pad_w_f
 
         pad = (pad_w_f, pad_w_b, pad_h_f, pad_h_b, pad_t_f, pad_t_b)
-        # print x.size()
-        # print pad
         x = F.pad(x, pad)
-        # print x.size()
 
         x = self.conv3d(x)
         if self._use_batch_norm:
@@ -725,7 +672,7 @@ def main(root, train_split, weights):
 
     val_dataset = NSLT(train_split, 'test', root, test_transforms)
     val_sampler = DistributedSampler(val_dataset)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, num_workers=2, pin_memory=False)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, pin_memory=False)
 
     dataloaders = {'train': dataloader, 'test': val_dataloader}
 
@@ -772,7 +719,7 @@ def main(root, train_split, weights):
             num_iter = 0
             optimizer.zero_grad()
 
-            confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int16)
+            confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int32)
             # Iterate over data.
             for data in dataloaders[phase]:
                 num_iter += 1

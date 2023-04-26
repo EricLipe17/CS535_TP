@@ -35,7 +35,6 @@ torch.backends.cudnn.benchmark = False
 
 
 def main(configs,
-         mode='rgb',
          root='/ssd/Charades_v1_rgb',
          train_split='charades/charades.json',
          save_model='',
@@ -43,27 +42,20 @@ def main(configs,
     print(configs)
 
     # setup dataset
-    train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
-                                           videotransforms.RandomHorizontalFlip(), ])
+    train_transforms = transforms.Compose([videotransforms.RandomCrop(224)])
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
-    dataset = Dataset(train_split, 'train', root, mode, train_transforms)
+    dataset = Dataset(train_split, 'train', root, train_transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=configs.batch_size, shuffle=True)
 
-    val_dataset = Dataset(train_split, 'test', root, mode, test_transforms)
+    val_dataset = Dataset(train_split, 'test', root, test_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=configs.batch_size, shuffle=True, num_workers=2,
                                                  pin_memory=False)
 
     dataloaders = {'train': dataloader, 'test': val_dataloader}
-    datasets = {'train': dataset, 'test': val_dataset}
 
     # setup the model
-    if mode == 'flow':
-        i3d = InceptionI3d(400, in_channels=2)
-        i3d.load_state_dict(torch.load('weights/flow_imagenet.pt'))
-    else:
-        i3d = InceptionI3d(2000, in_channels=3)
-        # i3d.load_state_dict(torch.load('weights/rgb_imagenet.pt'))
+    i3d = InceptionI3d(2000, in_channels=3)
 
     num_classes = dataset.num_classes
     i3d.replace_logits(num_classes)
@@ -93,8 +85,6 @@ def main(configs,
         epoch += 1
         # Each epoch has a training and validation phase
         for phase in ['train', 'test']:
-            collected_vids = []
-
             if phase == 'train':
                 i3d.train(True)
             else:
@@ -185,11 +175,11 @@ def main(configs,
 
 if __name__ == '__main__':
     mode = 'rgb'
-    root = {'word': '../data'}
+    root = '../data'
     save_model = 'checkpoints/'
     train_split = 'preprocess/nslt_2000.json'
     config_file = 'configfiles/asl2000.ini'
 
     configs = Config(config_file)
     print(root, train_split)
-    main(configs=configs, mode=mode, root=root, save_model=save_model, train_split=train_split, weights=None)
+    main(configs=configs, root=root, save_model=save_model, train_split=train_split, weights=None)
