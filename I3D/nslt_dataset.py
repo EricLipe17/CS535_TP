@@ -107,7 +107,7 @@ def make_dataset(split_file, split, root, num_classes):
             if data[vid]['subset'] != 'test':
                 continue
 
-        vid_root = root['word']
+        vid_root = root
         src = 0
 
         video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
