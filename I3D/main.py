@@ -202,7 +202,6 @@ class NSLT(data_utl.Dataset):
         self.num_classes = get_num_class(split_file)
 
         self.data = make_dataset(split_file, split, root, num_classes=self.num_classes)
-        print(f"Dataset Loaded for split: {split}")
         self.split_file = split_file
         self.transforms = transforms
         self.root = root
@@ -661,16 +660,21 @@ def main(root, train_split, weights):
     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
     print("Init process group")
     torch.distributed.init_process_group(backend="gloo", rank=WORLD_RANK, world_size=WORLD_SIZE)
+    print("Process group initialized")
 
     # setup dataset
     train_transforms = transforms.Compose([RandomCrop(224)])
     test_transforms = transforms.Compose([CenterCrop(224)])
 
+    print("Loading train dataset")
     dataset = NSLT(train_split, 'train', root, train_transforms)
+    print("Loaded train dataset")
     train_sampler = DistributedSampler(dataset)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
 
+    print("Loading val dataset")
     val_dataset = NSLT(train_split, 'test', root, test_transforms)
+    print("Loaded val dataset")
     val_sampler = DistributedSampler(val_dataset)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, pin_memory=False)
 
@@ -690,6 +694,7 @@ def main(root, train_split, weights):
 
     i3d.to(device)
     ddp_i3d = torch.nn.parallel.DistributedDataParallel(i3d, device_ids=[LOCAL_RANK], output_device=LOCAL_RANK)
+    print("Created distributed model")
 
     lr = learning_rate
     weight_decay = 1e-8
@@ -701,6 +706,7 @@ def main(root, train_split, weights):
 
     best_val_score = 0
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.3)
+    print("Begining to train and validate")
     while steps < max_steps and epoch < num_epochs:
         print('Step {}/{}'.format(steps, max_steps))
         print('-' * 10)
