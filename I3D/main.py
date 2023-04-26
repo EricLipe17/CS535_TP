@@ -83,8 +83,7 @@ def main(root, train_split, weights):
 
     val_dataset = Dataset(train_split, 'test', root, test_transforms)
     val_sampler = DistributedSampler(val_dataset)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler,
-                                                 shuffle=True, num_workers=2, pin_memory=False)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, num_workers=2, pin_memory=False)
 
     dataloaders = {'train': dataloader, 'test': val_dataloader}
 
