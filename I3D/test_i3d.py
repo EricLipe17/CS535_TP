@@ -13,7 +13,7 @@ import videotransforms
 import numpy as np
 
 import torch.nn.functional as F
-from pytorch_i3d import InceptionI3d
+from I3D import InceptionI3d
 
 # from nslt_dataset_all import NSLT as Dataset
 from datasets.nslt_dataset_all import NSLT as Dataset

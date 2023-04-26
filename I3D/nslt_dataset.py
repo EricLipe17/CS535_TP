@@ -92,7 +92,7 @@ def load_flow_frames(image_dir, vid, start, num):
     return np.asarray(frames, dtype=np.float32)
 
 
-def make_dataset(split_file, split, root, mode, num_classes):
+def make_dataset(split_file, split, root, num_classes):
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
@@ -115,9 +115,6 @@ def make_dataset(split_file, split, root, mode, num_classes):
             continue
 
         num_frames = int(cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FRAME_COUNT))
-
-        if mode == 'flow':
-            num_frames = num_frames // 2
 
         if num_frames - 0 < 9:
             print("Skip video ", vid)
@@ -157,13 +154,12 @@ def get_num_class(split_file):
 
 class NSLT(data_utl.Dataset):
 
-    def __init__(self, split_file, split, root, mode, transforms=None):
+    def __init__(self, split_file, split, root, transforms=None):
         self.num_classes = get_num_class(split_file)
 
-        self.data = make_dataset(split_file, split, root, mode, num_classes=self.num_classes)
+        self.data = make_dataset(split_file, split, root, num_classes=self.num_classes)
         self.split_file = split_file
         self.transforms = transforms
-        self.mode = mode
         self.root = root
 
     def __getitem__(self, index):
@@ -183,7 +179,7 @@ class NSLT(data_utl.Dataset):
         except ValueError:
             start_f = start_frame
 
-        imgs = load_rgb_frames_from_video(self.root['word'], vid, start_f, total_frames)
+        imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
 
         imgs, label = self.pad(imgs, label, total_frames)
 

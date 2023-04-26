@@ -303,17 +303,6 @@ class InceptionI3d(nn.Module):
 
         self.build()
 
-
-    def replace_logits(self, num_classes):
-        self._num_classes = num_classes
-        self.logits = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes,
-                             kernel_shape=[1, 1, 1],
-                             padding=0,
-                             activation_fn=None,
-                             use_batch_norm=False,
-                             use_bias=True,
-                             name='logits')
-
     def build(self):
         for k in self.end_points.keys():
             self.add_module(k, self.end_points[k])

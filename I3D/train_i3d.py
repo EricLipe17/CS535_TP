@@ -5,8 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import StepLR, MultiStepLR
 
 from torchvision import transforms
 import videotransforms
@@ -14,10 +12,9 @@ import videotransforms
 import numpy as np
 
 from configs import Config
-from pytorch_i3d import InceptionI3d
+from I3D import InceptionI3d
 
-# from datasets.nslt_dataset import NSLT as Dataset
-from datasets.nslt_dataset import NSLT as Dataset
+from nslt_dataset import NSLT as Dataset
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -37,12 +34,12 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 
-def run(configs,
-        mode='rgb',
-        root='/ssd/Charades_v1_rgb',
-        train_split='charades/charades.json',
-        save_model='',
-        weights=None):
+def main(configs,
+         mode='rgb',
+         root='/ssd/Charades_v1_rgb',
+         train_split='charades/charades.json',
+         save_model='',
+         weights=None):
     print(configs)
 
     # setup dataset
@@ -187,17 +184,12 @@ def run(configs,
 
 
 if __name__ == '__main__':
-    # WLASL setting
     mode = 'rgb'
-    root = {'word': '../../../data'}
-
+    root = {'word': '../data'}
     save_model = 'checkpoints/'
     train_split = 'preprocess/nslt_2000.json'
-
-    # weights = 'archived/asl2000/FINAL_nslt_2000_iters=5104_top1=32.48_top5=57.31_top10=66.31.pt'
-    weights = None
     config_file = 'configfiles/asl2000.ini'
 
     configs = Config(config_file)
     print(root, train_split)
-    run(configs=configs, mode=mode, root=root, save_model=save_model, train_split=train_split, weights=weights)
+    main(configs=configs, mode=mode, root=root, save_model=save_model, train_split=train_split, weights=None)
