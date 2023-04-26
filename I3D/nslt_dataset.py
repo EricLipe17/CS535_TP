@@ -181,6 +181,9 @@ class NSLT(data_utl.Dataset):
 
         imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
 
+        if not imgs.any():
+            return None, None, None
+
         imgs, label = self.pad(imgs, label, total_frames)
 
         imgs = self.transforms(imgs)

@@ -225,6 +225,9 @@ class NSLT(data_utl.Dataset):
 
         imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
 
+        if not imgs.any():
+            return None, None, None
+
         imgs, label = self.pad(imgs, label, total_frames)
 
         imgs = self.transforms(imgs)
@@ -736,6 +739,9 @@ def main(root, train_split, weights):
                 # inputs, labels, vid, src = data
                 inputs, labels, vid = data
 
+                if inputs is None:
+                    continue
+
                 # wrap them in Variable
                 inputs = inputs.to(device)
                 t = inputs.size(2)
@@ -771,7 +777,7 @@ def main(root, train_split, weights):
                     if steps % 10 == 0:
                         acc = float(np.trace(confusion_matrix)) / np.sum(confusion_matrix)
                         print(
-                            f'Epoch {epoch} Iter {num_iter} {phase} Loc Loss: {tot_loc_loss / (10 * num_steps_per_update):.4f} Cls Loss: {tot_cls_loss / (10 * num_steps_per_update):.4f} Tot Loss: {tot_loss / 10:.4f} Accu :{acc:.4f} '
+                            f'Epoch {epoch} {phase} Loc Loss: {tot_loc_loss / (10 * num_steps_per_update):.4f} Cls Loss: {tot_cls_loss / (10 * num_steps_per_update):.4f} Tot Loss: {tot_loss / 10:.4f} Accu :{acc:.4f} '
                         )
                         num_iter = 0
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.

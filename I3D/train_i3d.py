@@ -58,7 +58,6 @@ def main(configs,
     i3d = InceptionI3d(2000, in_channels=3)
 
     num_classes = dataset.num_classes
-    i3d.replace_logits(num_classes)
 
     if weights:
         print('loading weights {}'.format(weights))
@@ -106,6 +105,9 @@ def main(configs,
 
                 # inputs, labels, vid, src = data
                 inputs, labels, vid = data
+
+                if inputs is None:
+                    continue
 
                 # wrap them in Variable
                 inputs = inputs.cuda()
