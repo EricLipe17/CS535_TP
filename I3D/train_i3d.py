@@ -106,7 +106,7 @@ def main(configs,
                 # inputs, labels, vid, src = data
                 inputs, labels, vid = data
 
-                if inputs is None:
+                if vid == -9999:
                     continue
 
                 # wrap them in Variable
