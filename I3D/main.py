@@ -179,7 +179,7 @@ def make_dataset(split_file, split, root, num_classes):
         elif len(vid) == 6:  ## sign kws instances
             dataset.append((vid, label, src, data[vid]['action'][1], data[vid]['action'][2] - data[vid]['action'][1]))
 
-        if i % 20 == 0:
+        if i % 1000 == 0:
             print(f"Percent loaded {(i + 1) / total}")
         i += 1
     print("Skipped videos: ", count_skipping)
