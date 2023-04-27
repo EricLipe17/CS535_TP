@@ -800,4 +800,4 @@ if __name__ == '__main__':
     root = '../data'
     train_split = 'preprocess/nslt_2000.json'
     print(root, train_split)
-    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_007492_0.003165.pt')
+    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_014984_0.001582.pt')
