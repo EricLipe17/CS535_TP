@@ -140,33 +140,33 @@ if __name__ == '__main__':
         segment_sizes = [10, 15, 25, 71]
         for size in segment_sizes:
             for id, label in get_next_id_label():
-                path = os.path.abspath(os.path.join('./data', f'{id}.mp4'))
+                path = os.path.abspath(os.path.join('../data', f'{id}.mp4'))
                 if os.path.exists(path):
                     segments = segment_video(path, segment_size=size)
                     if segments:
                         for i, segment in enumerate(segments):
                             segment_name = f'{id}_{i}.mp4'
-                            out_dir = os.path.join('./processed_data', str(size), label, id)
+                            out_dir = os.path.join('../processed_data', str(size), label, id)
                             if not os.path.exists(out_dir):
                                 os.makedirs(out_dir)
                             out_path = os.path.abspath(os.path.join(out_dir, segment_name))
                             write_video(segment, out_path)
     elif padding:
         for id, label in get_next_id_label():
-            path = os.path.abspath(os.path.join('./data', f'{id}.mp4'))
+            path = os.path.abspath(os.path.join('../data', f'{id}.mp4'))
             if os.path.exists(path):
                 frames = pad_video(path)
-                out_dir = os.path.join('./processed_data/padded_videos', label)
+                out_dir = os.path.join('../processed_data/padded_videos', label)
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)
                 out_path = os.path.abspath(os.path.join(out_dir, f'{id}.mp4'))
                 write_video(frames, out_path)
     else:
         for id, label in get_next_id_label():
-            path = os.path.abspath(os.path.join('./data', f'{id}.mp4'))
+            path = os.path.abspath(os.path.join('../data', f'{id}.mp4'))
             if os.path.exists(path):
                 frames = get_frames(path)
-                out_dir = os.path.join('./processed_data/scaled_videos', label)
+                out_dir = os.path.join('../processed_data/scaled_videos', label)
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)
                 out_path = os.path.abspath(os.path.join(out_dir, f'{id}.mp4'))

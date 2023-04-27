@@ -32,7 +32,7 @@ if __name__ == '__main__':
                         writer.writerow(row)
     elif padding:
         file_map = dict()
-        for root, dirs, files in os.walk(f"processed_data/padded_videos"):
+        for root, dirs, files in os.walk(f"../processed_data/padded_videos"):
             if files:
                 for file in files:
                     f_id = file.split('.')[0]
