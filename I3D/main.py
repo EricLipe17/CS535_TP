@@ -617,6 +617,7 @@ def set_random_seeds(random_seed=0):
 def main(root, train_split, weights):
     num_epochs_default = 400
     max_steps_default = 64000
+    steps_per_update_default = 1
     batch_size_default = 6
     learning_rate_default = 0.0001
     random_seed_default = 0
@@ -631,10 +632,11 @@ def main(root, train_split, weights):
                         default=batch_size_default)
     parser.add_argument("--max_steps", type=int, help="Max steps per epoch.",
                         default=max_steps_default)
+    parser.add_argument("--steps_per_update", type=int, help="Number of steps to accumulate gradient before backprop.",
+                        default=steps_per_update_default)
     parser.add_argument("--learning_rate", type=float, help="Learning rate.", default=learning_rate_default)
     parser.add_argument("--random_seed", type=int, help="Random seed.", default=random_seed_default)
     parser.add_argument("--model_dir", type=str, help="Directory for saving models.", default=model_dir_default)
-    parser.add_argument("--resume", action="store_true", help="Resume training from saved checkpoint.", default=False)
     argv = parser.parse_args()
 
     LOCAL_RANK = int(os.environ['LOCAL_RANK'])
@@ -644,11 +646,11 @@ def main(root, train_split, weights):
     local_rank = argv.local_rank
     num_epochs = argv.num_epochs
     max_steps = argv.max_steps
+    steps_per_update = argv.steps_per_update
     batch_size = argv.batch_size // WORLD_SIZE
     learning_rate = argv.learning_rate
     random_seed = argv.random_seed
     model_dir = argv.model_dir
-    resume = argv.resume
 
     print('Args:')
     print(f'LOCAL_RANK: {LOCAL_RANK}')
@@ -659,7 +661,6 @@ def main(root, train_split, weights):
     print(f'learning_rate: {learning_rate}')
     print(f'random_seed: {random_seed}')
     print(f'model_dir: {model_dir}')
-    print(f'resume: {resume}')
 
     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
     print("Init process group")
@@ -702,9 +703,8 @@ def main(root, train_split, weights):
 
     lr = learning_rate
     weight_decay = 1e-8
-    optimizer = optim.Adam(ddp_i3d.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.Adam(ddp_i3d.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-    num_steps_per_update = 1  # accum gradient
     steps = 0
     epoch = 0
 
@@ -712,7 +712,7 @@ def main(root, train_split, weights):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.3)
     print("Begining to train and validate")
     while steps < max_steps and epoch < num_epochs:
-        print('Step {}/{}'.format(steps, max_steps))
+        print(f'Step {steps}/{max_steps}')
         print('-' * 10)
 
         epoch += 1
@@ -760,14 +760,13 @@ def main(root, train_split, weights):
                 gt = torch.max(labels, dim=2)[0]
 
                 # compute classification loss (with max-pooling along time B x C x T)
-                cls_loss = F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0],
-                                                              torch.max(labels, dim=2)[0])
+                cls_loss = F.binary_cross_entropy_with_logits(predictions, gt)
                 tot_cls_loss += cls_loss.data.item()
 
                 for i in range(per_frame_logits.shape[0]):
                     confusion_matrix[torch.argmax(gt[i]).item(), torch.argmax(predictions[i]).item()] += 1
 
-                loss = (0.5 * loc_loss + 0.5 * cls_loss) / num_steps_per_update
+                loss = (0.5 * loc_loss + 0.5 * cls_loss) / steps_per_update
                 tot_loss += loss.data.item()
                 loss.backward()
 
@@ -778,7 +777,7 @@ def main(root, train_split, weights):
                     if steps % 10 == 0:
                         acc = float(np.trace(confusion_matrix)) / np.sum(confusion_matrix)
                         print(
-                            f'Epoch {epoch} {phase} Loc Loss: {tot_loc_loss / (10 * num_steps_per_update):.4f} Cls Loss: {tot_cls_loss / (10 * num_steps_per_update):.4f} Tot Loss: {tot_loss / 10:.4f} Accu :{acc:.4f} '
+                            f'Epoch {epoch} {phase} Loc Loss: {tot_loc_loss / (10 * steps_per_update):.4f} Cls Loss: {tot_cls_loss / (10 * steps_per_update):.4f} Tot Loss: {tot_loss / 10:.4f} Accu :{acc:.4f} '
                         )
                         num_iter = 0
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
@@ -793,8 +792,8 @@ def main(root, train_split, weights):
                     print(model_name)
 
                     print(
-                        f'VALIDATION: {phase} Loc Loss: {tot_loc_loss / num_iter:.4f} Cls Loss: {tot_cls_loss / num_iter:.4f} Tot Loss: {(tot_loss * num_steps_per_update) / num_iter:.4f} Accu :{val_score:.4f}')
-                scheduler.step(tot_loss * num_steps_per_update / num_iter)
+                        f'VALIDATION: {phase} Loc Loss: {tot_loc_loss / num_iter:.4f} Cls Loss: {tot_cls_loss / num_iter:.4f} Tot Loss: {(tot_loss * steps_per_update) / num_iter:.4f} Accu :{val_score:.4f}')
+                scheduler.step(tot_loss * steps_per_update / num_iter)
 
 
 if __name__ == '__main__':

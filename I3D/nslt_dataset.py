@@ -7,51 +7,24 @@ import random
 import cv2
 import numpy as np
 import torch
-import torch.utils.data as data_utl
 
 
 def video_to_tensor(pic):
-    """Convert a ``numpy.ndarray`` to tensor.
-    Converts a numpy.ndarray (T x H x W x C)
-    to a torch.FloatTensor of shape (C x T x H x W)
-    
-    Args:
-         pic (numpy.ndarray): Video to be converted to tensor.
-    Returns:
-         Tensor: Converted video.
-    """
     return torch.from_numpy(pic.transpose([3, 0, 1, 2]))
-
-
-def load_rgb_frames(image_dir, vid, start, num):
-    frames = []
-    for i in range(start, start + num):
-        try:
-            img = cv2.imread(os.path.join(image_dir, vid, "image_" + str(i).zfill(5) + '.jpg'))[:, :, [2, 1, 0]]
-        except:
-            print(os.path.join(image_dir, vid, str(i).zfill(6) + '.jpg'))
-        w, h, c = img.shape
-        if w < 226 or h < 226:
-            d = 226. - min(w, h)
-            sc = 1 + d / min(w, h)
-            img = cv2.resize(img, dsize=(0, 0), fx=sc, fy=sc)
-        img = (img / 255.) * 2 - 1
-        frames.append(img)
-    return np.asarray(frames, dtype=np.float32)
 
 
 def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
     video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
 
-    vidcap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_path)
 
     frames = []
 
-    total_frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
+    total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    vidcap.set(cv2.CAP_PROP_POS_FRAMES, start)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
     for offset in range(min(num, int(total_frames - start))):
-        success, img = vidcap.read()
+        success, img = cap.read()
 
         if success:
             w, h, c = img.shape
@@ -71,13 +44,13 @@ def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
         print(f"\nFrames length zero for video: {vid}\n")
     return np.asarray(frames, dtype=np.float32)
 
+
 def make_dataset(split_file, split, root, num_classes):
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    i = 0
-    count_skipping = 0
+    skipped_videos = 0
     for vid in data.keys():
         if split == 'train':
             if data[vid]['subset'] not in ['train', 'val']:
@@ -87,7 +60,6 @@ def make_dataset(split_file, split, root, num_classes):
                 continue
 
         vid_root = root
-        src = 0
 
         video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
         if not os.path.exists(video_path):
@@ -95,43 +67,38 @@ def make_dataset(split_file, split, root, num_classes):
 
         num_frames = int(cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FRAME_COUNT))
 
-        if num_frames - 0 < 9:
+        if num_frames < 9:
             print("Skip video ", vid)
-            count_skipping += 1
+            skipped_videos += 1
             continue
 
-        label = np.zeros((num_classes, num_frames), np.float32)
+        label = np.zeros((num_classes, num_frames), np.int8)
 
-        for l in range(num_frames):
-            c_ = data[vid]['action'][0]
-            label[c_][l] = 1
+        for i in range(num_frames):
+            cls = data[vid]['action'][0]
+            label[cls][i] = 1
 
+        config_num_frames = data[vid]['action'][2] - data[vid]['action'][1]
         if len(vid) == 5:
-            a1 = data[vid]['action'][2]
-            a2 = data[vid]['action'][1]
-            dataset.append((vid, label, src, 0, a1 - a2))
-        elif len(vid) == 6:  ## sign kws instances
-            dataset.append((vid, label, src, data[vid]['action'][1], data[vid]['action'][2] - data[vid]['action'][1]))
+            dataset.append((vid, label, 0, config_num_frames))
+        elif len(vid) == 6:
+            dataset.append((vid, label, data[vid]['action'][1], config_num_frames))
 
-        i += 1
-    print("Skipped videos: ", count_skipping)
+    print("Skipped videos: ", skipped_videos)
     print(len(dataset))
     return dataset
 
 
 def get_num_class(split_file):
     classes = set()
-
     content = json.load(open(split_file))
-
     for vid in content.keys():
         class_id = content[vid]['action'][0]
         classes.add(class_id)
-
     return len(classes)
 
 
-class NSLT(data_utl.Dataset):
+class NSLT(torch.utils.data.Dataset):
 
     def __init__(self, split_file, split, root, transforms=None):
         self.num_classes = get_num_class(split_file)
@@ -141,85 +108,83 @@ class NSLT(data_utl.Dataset):
         self.transforms = transforms
         self.root = root
 
+        self.prev_frames = None
+        self.prev_label = None
+        self.prev_vid = None
+
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is class_index of the target class.
-        """
-        vid, label, src, start_frame, nf = self.data[index]
-
+        vid, label, start_frame, num_frames = self.data[index]
         total_frames = 64
-
         try:
-            start_f = random.randint(0, nf - total_frames - 1) + start_frame
+            start_f = random.randint(0, num_frames - total_frames - 1) + start_frame
         except ValueError:
             start_f = start_frame
 
-        imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
-
-        if not imgs.any() or imgs.shape[-1] != 3:
+        # Sometimes videos loaded incorrectly. This is a workaround for that
+        frames = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
+        if not frames.any() or frames.shape[-1] != 3:
             print("No frames, returning zeros array")
+            if self.prev_vid is not None:
+                return self.prev_frames, self.prev_label, self.prev_vid
             return torch.zeros((3, total_frames, 224, 224)), torch.zeros((2000, total_frames)), -9999
 
-        imgs, label = self.pad(imgs, label, total_frames)
+        frames, label = self.pad(frames, label, total_frames)
 
-        imgs = self.transforms(imgs)
+        frames = self.transforms(frames)
 
-        ret_lab = torch.from_numpy(label)
-        ret_img = video_to_tensor(imgs)
+        label = torch.from_numpy(label)
+        frames = video_to_tensor(frames)
 
-        return ret_img, ret_lab, vid
+        self.prev_frames = frames
+        self.prev_label = label
+        self.prev_vid = vid
+
+        return frames, label, vid
 
     def __len__(self):
         return len(self.data)
 
-    def pad(self, imgs, label, total_frames):
-        if imgs.shape[0] < total_frames:
-            num_padding = total_frames - imgs.shape[0]
+    def pad(self, frames, label, total_frames):
+        padded_frames = frames
+        if frames.shape[0] < total_frames:
+            num_padding = total_frames - frames.shape[0]
 
             if num_padding:
                 prob = np.random.random_sample()
                 if prob > 0.5:
-                    pad_img = imgs[0]
+                    pad_img = frames[0]
                     pad = np.tile(np.expand_dims(pad_img, axis=0), (num_padding, 1, 1, 1))
-                    padded_imgs = np.concatenate([imgs, pad], axis=0)
+                    padded_frames = np.concatenate([frames, pad], axis=0)
                 else:
-                    pad_img = imgs[-1]
+                    pad_img = frames[-1]
                     pad = np.tile(np.expand_dims(pad_img, axis=0), (num_padding, 1, 1, 1))
-                    padded_imgs = np.concatenate([imgs, pad], axis=0)
-        else:
-            padded_imgs = imgs
+                    padded_frames = np.concatenate([frames, pad], axis=0)
 
         label = label[:, 0]
         label = np.tile(label, (total_frames, 1)).transpose((1, 0))
 
-        return padded_imgs, label
+        return padded_frames, label
 
     @staticmethod
-    def pad_wrap(imgs, label, total_frames):
-        if imgs.shape[0] < total_frames:
-            num_padding = total_frames - imgs.shape[0]
+    def pad_wrap(frames, label, total_frames):
+        padded_frames = frames
+        if frames.shape[0] < total_frames:
+            num_padding = total_frames - frames.shape[0]
 
             if num_padding:
-                pad = imgs[:min(num_padding, imgs.shape[0])]
-                k = num_padding // imgs.shape[0]
-                tail = num_padding % imgs.shape[0]
+                pad = frames[:min(num_padding, frames.shape[0])]
+                k = num_padding // frames.shape[0]
+                tail = num_padding % frames.shape[0]
 
-                pad2 = imgs[:tail]
+                pad2 = frames[:tail]
                 if k > 0:
                     pad1 = np.array(k * [pad])[0]
 
-                    padded_imgs = np.concatenate([imgs, pad1, pad2], axis=0)
+                    padded_frames = np.concatenate([frames, pad1, pad2], axis=0)
                 else:
-                    padded_imgs = np.concatenate([imgs, pad2], axis=0)
-        else:
-            padded_imgs = imgs
+                    padded_frames = np.concatenate([frames, pad2], axis=0)
 
         label = label[:, 0]
         label = np.tile(label, (total_frames, 1)).transpose((1, 0))
 
-        return padded_imgs, label
-
+        return padded_frames, label
