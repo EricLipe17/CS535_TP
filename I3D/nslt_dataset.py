@@ -72,7 +72,7 @@ def make_dataset(split_file, split, root, num_classes):
             skipped_videos += 1
             continue
 
-        label = np.zeros((num_classes, num_frames), np.int8)
+        label = np.zeros((num_classes, num_frames), np.float32)
 
         for i in range(num_frames):
             cls = data[vid]['action'][0]

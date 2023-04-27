@@ -4,26 +4,17 @@ import numpy as np
 import random
 import math
 import numbers
-
 import cv2
 import json
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
-import torch.utils.data as data_utl
 from torchvision import transforms
 from torch.utils.data.distributed import DistributedSampler
 
 
-class RandomCrop(object):
-    """Crop the given video sequences (t x h x w) at a random location.
-    Args:
-        size (sequence or int): Desired output size of the crop. If size is an
-            int instead of sequence like (h, w), a square crop (size, size) is
-            made.
-    """
-
+class RandomCrop:
     def __init__(self, size):
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
@@ -32,13 +23,6 @@ class RandomCrop(object):
 
     @staticmethod
     def get_params(img, output_size):
-        """Get parameters for ``crop`` for a random crop.
-        Args:
-            img (PIL Image): Image to be cropped.
-            output_size (tuple): Expected output size of the crop.
-        Returns:
-            tuple: params (i, j, h, w) to be passed to ``crop`` for random crop.
-        """
         t, h, w, c = img.shape
         th, tw = output_size
         if w == tw and h == th:
@@ -59,14 +43,7 @@ class RandomCrop(object):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
 
 
-class CenterCrop(object):
-    """Crops the given seq Images at the center.
-    Args:
-        size (sequence or int): Desired output size of the crop. If size is an
-            int instead of sequence like (h, w), a square crop (size, size) is
-            made.
-    """
-
+class CenterCrop:
     def __init__(self, size):
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
@@ -74,12 +51,6 @@ class CenterCrop(object):
             self.size = size
 
     def __call__(self, imgs):
-        """
-        Args:
-            img (PIL Image): Image to be cropped.
-        Returns:
-            PIL Image: Cropped image.
-        """
         t, h, w, c = imgs.shape
         th, tw = self.size
         i = int(np.round((h - th) / 2.))
@@ -92,30 +63,21 @@ class CenterCrop(object):
 
 
 def video_to_tensor(pic):
-    """Convert a ``numpy.ndarray`` to tensor.
-    Converts a numpy.ndarray (T x H x W x C)
-    to a torch.FloatTensor of shape (C x T x H x W)
-
-    Args:
-         pic (numpy.ndarray): Video to be converted to tensor.
-    Returns:
-         Tensor: Converted video.
-    """
     return torch.from_numpy(pic.transpose([3, 0, 1, 2]))
 
 
-def load_rgb_frames_from_video(vid_root, vid, start, num):
+def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
     video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
 
-    vidcap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_path)
 
     frames = []
 
-    total_frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
+    total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    vidcap.set(cv2.CAP_PROP_POS_FRAMES, start)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
     for offset in range(min(num, int(total_frames - start))):
-        success, img = vidcap.read()
+        success, img = cap.read()
 
         if success:
             w, h, c = img.shape
@@ -132,7 +94,7 @@ def load_rgb_frames_from_video(vid_root, vid, start, num):
             frames.append(img)
 
     if not frames:
-        print("Frames length zero!")
+        print(f"\nFrames length zero for video: {vid}\n")
     return np.asarray(frames, dtype=np.float32)
 
 
@@ -141,8 +103,7 @@ def make_dataset(split_file, split, root, num_classes):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    i = 0
-    count_skipping = 0
+    skipped_videos = 0
     for vid in data.keys():
         if split == 'train':
             if data[vid]['subset'] not in ['train', 'val']:
@@ -152,7 +113,6 @@ def make_dataset(split_file, split, root, num_classes):
                 continue
 
         vid_root = root
-        src = 0
 
         video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
         if not os.path.exists(video_path):
@@ -160,43 +120,38 @@ def make_dataset(split_file, split, root, num_classes):
 
         num_frames = int(cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FRAME_COUNT))
 
-        if num_frames - 0 < 9:
+        if num_frames < 9:
             print("Skip video ", vid)
-            count_skipping += 1
+            skipped_videos += 1
             continue
 
         label = np.zeros((num_classes, num_frames), np.float32)
 
-        for l in range(num_frames):
-            c_ = data[vid]['action'][0]
-            label[c_][l] = 1
+        for i in range(num_frames):
+            cls = data[vid]['action'][0]
+            label[cls][i] = 1
 
+        config_num_frames = data[vid]['action'][2] - data[vid]['action'][1]
         if len(vid) == 5:
-            a1 = data[vid]['action'][2]
-            a2 = data[vid]['action'][1]
-            dataset.append((vid, label, src, 0, a1 - a2))
-        elif len(vid) == 6:  ## sign kws instances
-            dataset.append((vid, label, src, data[vid]['action'][1], data[vid]['action'][2] - data[vid]['action'][1]))
+            dataset.append((vid, label, 0, config_num_frames))
+        elif len(vid) == 6:
+            dataset.append((vid, label, data[vid]['action'][1], config_num_frames))
 
-        i += 1
-    print("Skipped videos: ", count_skipping)
+    print("Skipped videos: ", skipped_videos)
     print(len(dataset))
     return dataset
 
 
 def get_num_class(split_file):
     classes = set()
-
     content = json.load(open(split_file))
-
     for vid in content.keys():
         class_id = content[vid]['action'][0]
         classes.add(class_id)
-
     return len(classes)
 
 
-class NSLT(data_utl.Dataset):
+class NSLT(torch.utils.data.Dataset):
 
     def __init__(self, split_file, split, root, transforms=None):
         self.num_classes = get_num_class(split_file)
@@ -206,87 +161,86 @@ class NSLT(data_utl.Dataset):
         self.transforms = transforms
         self.root = root
 
+        self.prev_frames = None
+        self.prev_label = None
+        self.prev_vid = None
+
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is class_index of the target class.
-        """
-        vid, label, src, start_frame, nf = self.data[index]
-
+        vid, label, start_frame, num_frames = self.data[index]
         total_frames = 64
-
         try:
-            start_f = random.randint(0, nf - total_frames - 1) + start_frame
+            start_f = random.randint(0, num_frames - total_frames - 1) + start_frame
         except ValueError:
             start_f = start_frame
 
-        imgs = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
-
-        if not imgs.any() or imgs.shape[-1] != 3:
+        # Sometimes videos loaded incorrectly. This is a workaround for that
+        frames = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
+        if not frames.any() or frames.shape[-1] != 3:
             print("No frames, returning zeros array")
+            if self.prev_vid is not None:
+                return self.prev_frames, self.prev_label, self.prev_vid
             return torch.zeros((3, total_frames, 224, 224)), torch.zeros((2000, total_frames)), -9999
 
-        imgs, label = self.pad(imgs, label, total_frames)
+        frames, label = self.pad(frames, label, total_frames)
 
-        imgs = self.transforms(imgs)
+        frames = self.transforms(frames)
 
-        ret_lab = torch.from_numpy(label)
-        ret_img = video_to_tensor(imgs)
+        label = torch.from_numpy(label)
+        frames = video_to_tensor(frames)
 
-        return ret_img, ret_lab, vid
+        self.prev_frames = frames
+        self.prev_label = label
+        self.prev_vid = vid
+
+        return frames, label, vid
 
     def __len__(self):
         return len(self.data)
 
-    def pad(self, imgs, label, total_frames):
-        if imgs.shape[0] < total_frames:
-            num_padding = total_frames - imgs.shape[0]
+    def pad(self, frames, label, total_frames):
+        padded_frames = frames
+        if frames.shape[0] < total_frames:
+            num_padding = total_frames - frames.shape[0]
 
             if num_padding:
                 prob = np.random.random_sample()
                 if prob > 0.5:
-                    pad_img = imgs[0]
+                    pad_img = frames[0]
                     pad = np.tile(np.expand_dims(pad_img, axis=0), (num_padding, 1, 1, 1))
-                    padded_imgs = np.concatenate([imgs, pad], axis=0)
+                    padded_frames = np.concatenate([frames, pad], axis=0)
                 else:
-                    pad_img = imgs[-1]
+                    pad_img = frames[-1]
                     pad = np.tile(np.expand_dims(pad_img, axis=0), (num_padding, 1, 1, 1))
-                    padded_imgs = np.concatenate([imgs, pad], axis=0)
-        else:
-            padded_imgs = imgs
+                    padded_frames = np.concatenate([frames, pad], axis=0)
 
         label = label[:, 0]
         label = np.tile(label, (total_frames, 1)).transpose((1, 0))
 
-        return padded_imgs, label
+        return padded_frames, label
 
     @staticmethod
-    def pad_wrap(imgs, label, total_frames):
-        if imgs.shape[0] < total_frames:
-            num_padding = total_frames - imgs.shape[0]
+    def pad_wrap(frames, label, total_frames):
+        padded_frames = frames
+        if frames.shape[0] < total_frames:
+            num_padding = total_frames - frames.shape[0]
 
             if num_padding:
-                pad = imgs[:min(num_padding, imgs.shape[0])]
-                k = num_padding // imgs.shape[0]
-                tail = num_padding % imgs.shape[0]
+                pad = frames[:min(num_padding, frames.shape[0])]
+                k = num_padding // frames.shape[0]
+                tail = num_padding % frames.shape[0]
 
-                pad2 = imgs[:tail]
+                pad2 = frames[:tail]
                 if k > 0:
                     pad1 = np.array(k * [pad])[0]
 
-                    padded_imgs = np.concatenate([imgs, pad1, pad2], axis=0)
+                    padded_frames = np.concatenate([frames, pad1, pad2], axis=0)
                 else:
-                    padded_imgs = np.concatenate([imgs, pad2], axis=0)
-        else:
-            padded_imgs = imgs
+                    padded_frames = np.concatenate([frames, pad2], axis=0)
 
         label = label[:, 0]
         label = np.tile(label, (total_frames, 1)).transpose((1, 0))
 
-        return padded_imgs, label
+        return padded_frames, label
 
 
 class MaxPool3dSamePadding(nn.MaxPool3d):
@@ -328,7 +282,6 @@ class Unit3D(nn.Module):
                  use_bias=False,
                  name='unit_3d'):
 
-        """Initializes Unit3D module."""
         super(Unit3D, self).__init__()
 
         self._output_channels = output_channels
@@ -345,7 +298,6 @@ class Unit3D(nn.Module):
                                 kernel_size=self._kernel_shape,
                                 stride=self._stride,
                                 padding=0,
-                                # we always want padding to be 0 here. We will dynamically pad based on input size in forward function
                                 bias=self._use_bias)
 
         if self._use_batch_norm:
@@ -386,27 +338,27 @@ class InceptionModule(nn.Module):
     def __init__(self, in_channels, out_channels, name):
         super(InceptionModule, self).__init__()
 
-        self.b0 = Unit3D(in_channels=in_channels, output_channels=out_channels[0], kernel_shape=[1, 1, 1], padding=0,
-                         name=name + '/Branch_0/Conv3d_0a_1x1')
-        self.b1a = Unit3D(in_channels=in_channels, output_channels=out_channels[1], kernel_shape=[1, 1, 1], padding=0,
-                          name=name + '/Branch_1/Conv3d_0a_1x1')
-        self.b1b = Unit3D(in_channels=out_channels[1], output_channels=out_channels[2], kernel_shape=[3, 3, 3],
-                          name=name + '/Branch_1/Conv3d_0b_3x3')
-        self.b2a = Unit3D(in_channels=in_channels, output_channels=out_channels[3], kernel_shape=[1, 1, 1], padding=0,
-                          name=name + '/Branch_2/Conv3d_0a_1x1')
-        self.b2b = Unit3D(in_channels=out_channels[3], output_channels=out_channels[4], kernel_shape=[3, 3, 3],
-                          name=name + '/Branch_2/Conv3d_0b_3x3')
-        self.b3a = MaxPool3dSamePadding(kernel_size=[3, 3, 3],
-                                        stride=(1, 1, 1), padding=0)
-        self.b3b = Unit3D(in_channels=in_channels, output_channels=out_channels[5], kernel_shape=[1, 1, 1], padding=0,
-                          name=name + '/Branch_3/Conv3d_0b_1x1')
+        self.conv0 = Unit3D(in_channels=in_channels, output_channels=out_channels[0], kernel_shape=(1, 1, 1), padding=0,
+                            name=name + '/Branch_0/Conv3d_0a_1x1')
+        self.conv1 = Unit3D(in_channels=in_channels, output_channels=out_channels[1], kernel_shape=(1, 1, 1), padding=0,
+                            name=name + '/Branch_1/Conv3d_0a_1x1')
+        self.conv2 = Unit3D(in_channels=out_channels[1], output_channels=out_channels[2], kernel_shape=(3, 3, 3),
+                            name=name + '/Branch_1/Conv3d_0b_3x3')
+        self.conv3 = Unit3D(in_channels=in_channels, output_channels=out_channels[3], kernel_shape=(1, 1, 1), padding=0,
+                            name=name + '/Branch_2/Conv3d_0a_1x1')
+        self.conv4 = Unit3D(in_channels=out_channels[3], output_channels=out_channels[4], kernel_shape=(3, 3, 3),
+                            name=name + '/Branch_2/Conv3d_0b_3x3')
+        self.max_pool = MaxPool3dSamePadding(kernel_size=[3, 3, 3],
+                                             stride=(1, 1, 1), padding=0)
+        self.conv5 = Unit3D(in_channels=in_channels, output_channels=out_channels[5], kernel_shape=(1, 1, 1), padding=0,
+                            name=name + '/Branch_3/Conv3d_0b_1x1')
         self.name = name
 
     def forward(self, x):
-        b0 = self.b0(x)
-        b1 = self.b1b(self.b1a(x))
-        b2 = self.b2b(self.b2a(x))
-        b3 = self.b3b(self.b3a(x))
+        b0 = self.conv0(x)
+        b1 = self.conv2(self.conv1(x))
+        b2 = self.conv4(self.conv3(x))
+        b3 = self.conv5(self.max_pool(x))
         return torch.cat([b0, b1, b2, b3], dim=1)
 
 
@@ -423,9 +375,6 @@ class InceptionI3d(nn.Module):
         http://arxiv.org/pdf/1409.4842v1.pdf.
     """
 
-    # Endpoints of the model in order. During construction, all the endpoints up
-    # to a designated `final_endpoint` are returned in a dictionary as the
-    # second return value.
     VALID_ENDPOINTS = (
         'Conv3d_1a_7x7',
         'MaxPool3d_2a_3x3',
@@ -449,23 +398,6 @@ class InceptionI3d(nn.Module):
 
     def __init__(self, num_classes=400, spatial_squeeze=True,
                  final_endpoint='Logits', name='inception_i3d', in_channels=3, dropout_keep_prob=0.5):
-        """Initializes I3D model instance.
-        Args:
-          num_classes: The number of outputs in the logit layer (default 400, which
-              matches the Kinetics dataset).
-          spatial_squeeze: Whether to squeeze the spatial dimensions for the logits
-              before returning (default True).
-          final_endpoint: The model contains many possible endpoints.
-              `final_endpoint` specifies the last endpoint for the model to be built
-              up to. In addition to the output at `final_endpoint`, all the outputs
-              at endpoints up to `final_endpoint` will also be returned, in a
-              dictionary. `final_endpoint` must be one of
-              InceptionI3d.VALID_ENDPOINTS (default 'Logits').
-          name: A string (optional). The name of this module.
-        Raises:
-          ValueError: if `final_endpoint` is not recognized.
-        """
-
         if final_endpoint not in self.VALID_ENDPOINTS:
             raise ValueError('Unknown final endpoint %s' % final_endpoint)
 
@@ -480,27 +412,27 @@ class InceptionI3d(nn.Module):
 
         self.end_points = {}
         end_point = 'Conv3d_1a_7x7'
-        self.end_points[end_point] = Unit3D(in_channels=in_channels, output_channels=64, kernel_shape=[7, 7, 7],
+        self.end_points[end_point] = Unit3D(in_channels=in_channels, output_channels=64, kernel_shape=(7, 7, 7),
                                             stride=(2, 2, 2), padding=(3, 3, 3), name=name + end_point)
         if self._final_endpoint == end_point: return
 
         end_point = 'MaxPool3d_2a_3x3'
-        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=[1, 3, 3], stride=(1, 2, 2),
+        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=(1, 3, 3), stride=(1, 2, 2),
                                                           padding=0)
         if self._final_endpoint == end_point: return
 
         end_point = 'Conv3d_2b_1x1'
-        self.end_points[end_point] = Unit3D(in_channels=64, output_channels=64, kernel_shape=[1, 1, 1], padding=0,
+        self.end_points[end_point] = Unit3D(in_channels=64, output_channels=64, kernel_shape=(1, 1, 1), padding=0,
                                             name=name + end_point)
         if self._final_endpoint == end_point: return
 
         end_point = 'Conv3d_2c_3x3'
-        self.end_points[end_point] = Unit3D(in_channels=64, output_channels=192, kernel_shape=[3, 3, 3], padding=1,
+        self.end_points[end_point] = Unit3D(in_channels=64, output_channels=192, kernel_shape=(3, 3, 3), padding=1,
                                             name=name + end_point)
         if self._final_endpoint == end_point: return
 
         end_point = 'MaxPool3d_3a_3x3'
-        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=[1, 3, 3], stride=(1, 2, 2),
+        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=(1, 3, 3), stride=(1, 2, 2),
                                                           padding=0)
         if self._final_endpoint == end_point: return
 
@@ -513,7 +445,7 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         end_point = 'MaxPool3d_4a_3x3'
-        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=[3, 3, 3], stride=(2, 2, 2),
+        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=(3, 3, 3), stride=(2, 2, 2),
                                                           padding=0)
         if self._final_endpoint == end_point: return
 
@@ -539,7 +471,7 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         end_point = 'MaxPool3d_5a_2x2'
-        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=[2, 2, 2], stride=(2, 2, 2),
+        self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=(2, 2, 2), stride=(2, 2, 2),
                                                           padding=0)
         if self._final_endpoint == end_point: return
 
@@ -554,11 +486,10 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         end_point = 'Logits'
-        self.avg_pool = nn.AvgPool3d(kernel_size=[2, 7, 7],
-                                     stride=(1, 1, 1))
+        self.avg_pool = nn.AvgPool3d(kernel_size=(2, 7, 7), stride=(1, 1, 1))
         self.dropout = nn.Dropout(dropout_keep_prob)
         self.logits = Unit3D(in_channels=384 + 384 + 128 + 128, output_channels=self._num_classes,
-                             kernel_shape=[1, 1, 1],
+                             kernel_shape=(1, 1, 1),
                              padding=0,
                              activation_fn=None,
                              use_batch_norm=False,
@@ -585,12 +516,12 @@ class InceptionI3d(nn.Module):
         with torch.no_grad():
             for end_point in freeze_endpoints:
                 if end_point in self.end_points:
-                    x = self._modules[end_point](x)  # use _modules to work with dataparallel
+                    x = self._modules[end_point](x)
 
         # backbone, gradient part
         for end_point in tune_endpoints:
             if end_point in self.end_points:
-                x = self._modules[end_point](x)  # use _modules to work with dataparallel
+                x = self._modules[end_point](x)
 
         # head
         x = self.logits(self.dropout(self.avg_pool(x)))
@@ -598,12 +529,6 @@ class InceptionI3d(nn.Module):
             logits = x.squeeze(3).squeeze(3)
         # logits is batch X time X classes, which is what we want to work with
         return logits
-
-    def extract_features(self, x):
-        for end_point in self.VALID_ENDPOINTS:
-            if end_point in self.end_points:
-                x = self._modules[end_point](x)
-        return self.avg_pool(x)
 
 
 def set_random_seeds(random_seed=0):
