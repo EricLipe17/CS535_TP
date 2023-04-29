@@ -11,7 +11,7 @@ from I3D import InceptionI3d
 from nslt_dataset import NSLT as Dataset
 
 
-def main(root, train_split, weights):
+def main(root, data_file, weights):
     num_epochs_default = 400
     max_steps_default = 64000
     steps_per_update_default = 1
@@ -51,10 +51,10 @@ def main(root, train_split, weights):
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224)])
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
-    dataset = Dataset(train_split, 'train', root, train_transforms)
+    dataset = Dataset(data_file, 'train', root, train_transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = Dataset(train_split, 'test', root, test_transforms)
+    val_dataset = Dataset(data_file, 'test', root, test_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=2,
                                                  pin_memory=False)
 
@@ -179,6 +179,6 @@ def main(root, train_split, weights):
 if __name__ == '__main__':
     root = '../data'
     save_model = 'checkpoints/'
-    train_split = 'preprocess/nslt_2000.json'
+    data_file = 'preprocess/nslt_2000.json'
 
-    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_064922_0.100910.pt')
+    main(root=root, data_file=data_file, weights='checkpoints/nslt_2000_044946_0.142461.pt')
