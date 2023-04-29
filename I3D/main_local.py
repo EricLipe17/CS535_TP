@@ -181,4 +181,4 @@ if __name__ == '__main__':
     save_model = 'checkpoints/'
     train_split = 'preprocess/nslt_2000.json'
 
-    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_002497_0.022161.pt')
+    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_064922_0.100910.pt')
