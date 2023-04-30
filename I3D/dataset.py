@@ -13,7 +13,7 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3, 0, 1, 2]))
 
 
-def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
+def load_rgb_frames_from_video(vid_root, vid, start, num):
     video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
 
     cap = cv2.VideoCapture(video_path)
@@ -98,7 +98,7 @@ def get_num_class(split_file):
     return len(classes)
 
 
-class NSLT(torch.utils.data.Dataset):
+class WLASLDataset(torch.utils.data.Dataset):
 
     def __init__(self, split_file, split, root, transforms=None):
         self.num_classes = get_num_class(split_file)
@@ -120,7 +120,7 @@ class NSLT(torch.utils.data.Dataset):
         except ValueError:
             start_f = start_frame
 
-        # Sometimes videos loaded incorrectly. This is a workaround for that
+        # Sometimes videos load incorrectly. This is a workaround for that
         frames = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
         if not frames.any() or frames.shape[-1] != 3:
             print("No frames, returning zeros array")
@@ -165,26 +165,3 @@ class NSLT(torch.utils.data.Dataset):
 
         return padded_frames, label
 
-    @staticmethod
-    def pad_wrap(frames, label, total_frames):
-        padded_frames = frames
-        if frames.shape[0] < total_frames:
-            num_padding = total_frames - frames.shape[0]
-
-            if num_padding:
-                pad = frames[:min(num_padding, frames.shape[0])]
-                k = num_padding // frames.shape[0]
-                tail = num_padding % frames.shape[0]
-
-                pad2 = frames[:tail]
-                if k > 0:
-                    pad1 = np.array(k * [pad])[0]
-
-                    padded_frames = np.concatenate([frames, pad1, pad2], axis=0)
-                else:
-                    padded_frames = np.concatenate([frames, pad2], axis=0)
-
-        label = label[:, 0]
-        label = np.tile(label, (total_frames, 1)).transpose((1, 0))
-
-        return padded_frames, label

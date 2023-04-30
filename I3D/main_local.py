@@ -8,7 +8,7 @@ from torchvision import transforms
 import videotransforms
 import numpy as np
 from I3D import InceptionI3d
-from nslt_dataset import NSLT as Dataset
+from dataset import WLASLDataset
 
 
 def main(root, data_file, weights):
@@ -51,10 +51,10 @@ def main(root, data_file, weights):
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224)])
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
-    dataset = Dataset(data_file, 'train', root, train_transforms)
+    dataset = WLASLDataset(data_file, 'train', root, train_transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = Dataset(data_file, 'test', root, test_transforms)
+    val_dataset = WLASLDataset(data_file, 'val', root, test_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=2,
                                                  pin_memory=False)
 
@@ -91,7 +91,7 @@ def main(root, data_file, weights):
 
         epoch += 1
         # Each epoch has a training and validation phase
-        for phase in ['train', 'test']:
+        for phase in ['train', 'val']:
             if phase == 'train':
                 i3d.train(True)
             else:
@@ -105,6 +105,7 @@ def main(root, data_file, weights):
 
             confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int32)
             # Iterate over data.
+            val = 0
             for data in dataloaders[phase]:
                 num_iter += 1
                 # get the inputs
@@ -156,7 +157,12 @@ def main(root, data_file, weights):
                                                                                                                  tot_loss / 10,
                                                                                                                  acc))
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
-            if phase == 'test':
+
+            if val == 0:
+                np.save("train_confusion_matrix.npy", confusion_matrix)
+                print("Wrote Training confusion matrix")
+                exit(0)
+            if phase == 'val':
                 val_score = float(np.trace(confusion_matrix)) / np.sum(confusion_matrix)
                 if val_score > best_val_score or epoch % 2 == 0:
                     best_val_score = val_score
@@ -179,6 +185,6 @@ def main(root, data_file, weights):
 if __name__ == '__main__':
     root = '../data'
     save_model = 'checkpoints/'
-    data_file = 'preprocess/nslt_2000.json'
+    data_file = 'train_test_val.json'
 
     main(root=root, data_file=data_file, weights='checkpoints/nslt_2000_044946_0.142461.pt')

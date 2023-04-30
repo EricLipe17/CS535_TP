@@ -66,7 +66,7 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3, 0, 1, 2]))
 
 
-def load_rgb_frames_from_video(vid_root, vid, start, num, resize=(256, 256)):
+def load_rgb_frames_from_video(vid_root, vid, start, num):
     video_path = os.path.abspath(os.path.join(vid_root, vid + '.mp4'))
 
     cap = cv2.VideoCapture(video_path)
@@ -151,7 +151,7 @@ def get_num_class(split_file):
     return len(classes)
 
 
-class NSLT(torch.utils.data.Dataset):
+class WLASLDataset(torch.utils.data.Dataset):
 
     def __init__(self, split_file, split, root, transforms=None):
         self.num_classes = get_num_class(split_file)
@@ -173,7 +173,7 @@ class NSLT(torch.utils.data.Dataset):
         except ValueError:
             start_f = start_frame
 
-        # Sometimes videos loaded incorrectly. This is a workaround for that
+        # Sometimes videos load incorrectly. This is a workaround for that
         frames = load_rgb_frames_from_video(self.root, vid, start_f, total_frames)
         if not frames.any() or frames.shape[-1] != 3:
             print("No frames, returning zeros array")
@@ -212,30 +212,6 @@ class NSLT(torch.utils.data.Dataset):
                     pad_img = frames[-1]
                     pad = np.tile(np.expand_dims(pad_img, axis=0), (num_padding, 1, 1, 1))
                     padded_frames = np.concatenate([frames, pad], axis=0)
-
-        label = label[:, 0]
-        label = np.tile(label, (total_frames, 1)).transpose((1, 0))
-
-        return padded_frames, label
-
-    @staticmethod
-    def pad_wrap(frames, label, total_frames):
-        padded_frames = frames
-        if frames.shape[0] < total_frames:
-            num_padding = total_frames - frames.shape[0]
-
-            if num_padding:
-                pad = frames[:min(num_padding, frames.shape[0])]
-                k = num_padding // frames.shape[0]
-                tail = num_padding % frames.shape[0]
-
-                pad2 = frames[:tail]
-                if k > 0:
-                    pad1 = np.array(k * [pad])[0]
-
-                    padded_frames = np.concatenate([frames, pad1, pad2], axis=0)
-                else:
-                    padded_frames = np.concatenate([frames, pad2], axis=0)
 
         label = label[:, 0]
         label = np.tile(label, (total_frames, 1)).transpose((1, 0))
@@ -597,13 +573,13 @@ def main(root, train_split, weights):
     test_transforms = transforms.Compose([CenterCrop(224)])
 
     print("Loading train dataset")
-    dataset = NSLT(train_split, 'train', root, train_transforms)
+    dataset = WLASLDataset(train_split, 'train', root, train_transforms)
     print("Loaded train dataset")
     train_sampler = DistributedSampler(dataset)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
 
     print("Loading val dataset")
-    val_dataset = NSLT(train_split, 'test', root, test_transforms)
+    val_dataset = WLASLDataset(train_split, 'test', root, test_transforms)
     print("Loaded val dataset")
     val_sampler = DistributedSampler(val_dataset)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, pin_memory=False)
@@ -723,6 +699,6 @@ def main(root, train_split, weights):
 
 if __name__ == '__main__':
     root = '../data'
-    train_split = 'preprocess/nslt_2000.json'
+    train_split = 'train_test_val.json'
     print(root, train_split)
-    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_014984_0.001582.pt')
+    main(root=root, train_split=train_split, weights='checkpoints/nslt_2000_044946_0.142461.pt')
